@@ -22,10 +22,11 @@ import BusinessDashboard from './pages/BusinessDashboard';
 import BusinessCoursePlaceholder from './pages/BusinessCoursePlaceholder';
 import CoursePlayer from './pages/CoursePlayer';
 import ProfilePage from './pages/ProfilePage';
+import InstructorDashboard from './pages/InstructorDashboard';
 
 import './App.css';
 
-const BARE_ROUTES = ['/login', '/dashboard', '/player', '/profile'];
+const BARE_ROUTES = ['/login', '/dashboard', '/player', '/profile', '/instructor'];
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -54,6 +55,10 @@ const AppContent = () => {
     }
     if (path === 'dashboard') {
       const portal = localStorage.getItem('humacap_portal_preference');
+      if (portal === 'instructor') {
+        navigate('/instructor');
+        return;
+      }
       navigate(portal === 'business' ? '/dashboard-business' : '/dashboard');
       return;
     }
@@ -101,6 +106,7 @@ const AppContent = () => {
             <Route path="/dashboard-business/course/:courseId" element={<ProtectedRoute><BusinessCoursePlaceholder /></ProtectedRoute>} />
             <Route path="/player/:courseId" element={<ProtectedRoute><CoursePlayer /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/instructor" element={<ProtectedRoute><InstructorDashboard /></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -77,9 +77,16 @@ const Navbar = ({ navigate, currentPage }) => {
           </div>
 
           {user ? (
-            <button onClick={() => handleNav('dashboard')} className="btn btn-primary flex items-center gap-2">
-              <User size={16} /> Dashboard
-            </button>
+            <>
+              <button onClick={() => handleNav('dashboard')} className="btn btn-primary flex items-center gap-2">
+                <User size={16} /> Dashboard
+              </button>
+              {(user?.email === 'info@humacap.ca' || localStorage.getItem('humacap_portal_preference') === 'instructor') && (
+                <button onClick={() => handleNav('instructor')} className="btn btn-primary flex items-center gap-2">
+                  Instructor Portal
+                </button>
+              )}
+            </>
           ) : (
             <button onClick={() => handleNav('login')} className="btn btn-outline flex items-center gap-2">
               <User size={16} /> Sign In
