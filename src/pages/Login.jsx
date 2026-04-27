@@ -39,14 +39,17 @@ const LoginPage = () => {
   const fetchUserRole = async (userId) => {
     if (!userId) return null;
     try {
+      console.log('[Login][Step 4] Querying profiles for role', { userId });
       const { data, error } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', userId)
         .maybeSingle();
+      console.log('[Login][Step 5] Profiles query result', { data, error });
       if (error) return null;
       return data?.role || null;
-    } catch (_err) {
+    } catch (err) {
+      console.error('[Login][Error] fetchUserRole failed', err);
       return null;
     }
   };
@@ -63,31 +66,57 @@ const LoginPage = () => {
     setLoading(true);
     setError(null);
 
+    console.log('[Login][Step 1] Auth flow started', {
+      mode: isLogin ? 'sign_in' : 'sign_up',
+      email,
+      portal,
+    });
+
     let result;
     if (isLogin) {
-      result = await supabase.auth.signInWithPassword({ email, password });
-    } else {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      let payload;
       try {
-        payload = await response.json();
-      } catch (_e) {
-        throw new Error('Invalid server response');
+        result = await supabase.auth.signInWithPassword({ email, password });
+        console.log('[Login][Step 2] signInWithPassword returned', result);
+        console.log('[Login][Step 3] Returned user object', result?.data?.user || null);
+      } catch (err) {
+        console.error('[Login][Error] signInWithPassword threw', err);
+        setError('Login failed unexpectedly. Please try again.');
+        setLoading(false);
+        return;
       }
-      if (!response.ok) {
-        throw new Error(payload?.error || 'Signup failed');
+    } else {
+      try {
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        let payload;
+        try {
+          payload = await response.json();
+        } catch (_e) {
+          throw new Error('Invalid server response');
+        }
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Signup failed');
+        }
+        result = payload.ok
+          ? { data: { session: null }, error: null }
+          : { data: null, error: { message: payload.error || 'Signup failed.' } };
+      } catch (err) {
+        console.error('[Login][Error] Signup request failed', err);
+        setError(err?.message || 'Signup failed');
+        setLoading(false);
+        return;
       }
-      result = payload.ok
-        ? { data: { session: null }, error: null }
-        : { data: null, error: { message: payload.error || 'Signup failed.' } };
     }
 
     const loggedInUserId = result?.data?.user?.id || null;
     const role = isLogin ? await fetchUserRole(loggedInUserId) : null;
+    console.log('[Login][Step 6] Final user object with role', {
+      user: result?.data?.user || null,
+      role: role || 'student',
+    });
     const dashboardPath = role === 'instructor'
       ? '/instructor'
       : (portal === 'business' ? '/dashboard-business' : '/dashboard');

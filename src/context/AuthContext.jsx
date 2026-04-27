@@ -7,18 +7,22 @@ const enrichUserWithRole = async (authUser) => {
   if (!authUser?.id) return null;
 
   try {
+    console.log('[AuthContext][Step A] Fetching profile role', { userId: authUser.id });
     const { data, error } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', authUser.id)
       .maybeSingle();
+    console.log('[AuthContext][Step B] Profiles query result', { userId: authUser.id, data, error });
 
     if (error) {
       console.warn('Failed to fetch profile role. Falling back to student role.', {
         userId: authUser.id,
         reason: error.message || 'profile_query_failed',
       });
-      return { ...authUser, role: 'student' };
+      const fallbackUser = { ...authUser, role: 'student' };
+      console.log('[AuthContext][Step C] Final user with fallback role', fallbackUser);
+      return fallbackUser;
     }
 
     if (!data || data.role == null) {
@@ -27,15 +31,20 @@ const enrichUserWithRole = async (authUser) => {
       });
     }
 
-    return {
+    const userWithRole = {
       ...authUser,
       role: data?.role ?? 'student',
     };
+    console.log('[AuthContext][Step C] Final user with role', userWithRole);
+    return userWithRole;
   } catch (_err) {
     console.warn('Unexpected profile role lookup failure. Falling back to student role.', {
       userId: authUser.id,
     });
-    return { ...authUser, role: 'student' };
+    console.error('[AuthContext][Error] enrichUserWithRole failed', _err);
+    const fallbackUser = { ...authUser, role: 'student' };
+    console.log('[AuthContext][Step C] Final user with fallback role', fallbackUser);
+    return fallbackUser;
   }
 };
 
@@ -48,7 +57,9 @@ export const AuthProvider = ({ children }) => {
 
     const bootstrap = async () => {
       try {
+        console.log('[AuthContext][Bootstrap] Session load started');
         const { data: { session } } = await supabase.auth.getSession();
+        console.log('[AuthContext][Bootstrap] getSession returned', { session });
         if (!session?.user) {
           setUser(null);
         } else {
@@ -58,6 +69,7 @@ export const AuthProvider = ({ children }) => {
       } catch (err) {
         // If Supabase env vars aren't set (or network fails), keep the UI usable.
         console.warn('Supabase getSession failed:', err);
+        console.error('[AuthContext][Error] bootstrap failed', err);
         setUser(null);
       } finally {
         setLoading(false);
@@ -68,6 +80,7 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        console.log('[AuthContext][AuthStateChange] Event received', { event: _event, session });
         if (!session?.user) {
           setUser(null);
           return;
@@ -78,6 +91,7 @@ export const AuthProvider = ({ children }) => {
       subscription = sub;
     } catch (err) {
       console.warn('Supabase onAuthStateChange failed:', err);
+      console.error('[AuthContext][Error] onAuthStateChange setup failed', err);
     }
 
     return () => subscription?.unsubscribe?.();
