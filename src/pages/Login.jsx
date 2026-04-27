@@ -36,24 +36,6 @@ const LoginPage = () => {
   const { supabase } = useAuth();
   const navigate = useNavigate();
 
-  const fetchUserRole = async (userId) => {
-    if (!userId) return null;
-    try {
-      console.log('[Login][Step 4] Querying profiles for role', { userId });
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-      console.log('[Login][Step 5] Profiles query result', { data, error });
-      if (error) return null;
-      return data?.role || null;
-    } catch (err) {
-      console.error('[Login][Error] fetchUserRole failed', err);
-      return null;
-    }
-  };
-
   const handleAuth = async (e) => {
     e.preventDefault();
     const passwordValidation = getPasswordValidation(password);
@@ -111,15 +93,10 @@ const LoginPage = () => {
       }
     }
 
-    const loggedInUserId = result?.data?.user?.id || null;
-    const role = isLogin ? await fetchUserRole(loggedInUserId) : null;
-    console.log('[Login][Step 6] Final user object with role', {
+    console.log('[Login][Step 4] Auth success result', {
       user: result?.data?.user || null,
-      role: role || 'student',
+      session: result?.data?.session || null,
     });
-    const dashboardPath = role === 'instructor'
-      ? '/instructor'
-      : (portal === 'business' ? '/dashboard-business' : '/dashboard');
     localStorage.setItem('humacap_portal_preference', portal);
 
     if (result.error) {
@@ -133,12 +110,14 @@ const LoginPage = () => {
       setLoading(false);
     } else {
       if (isLogin) {
-        navigate(dashboardPath);
+        // Do not perform role-driven navigation here.
+        // AuthContext is the source of truth for user/session/role state.
+        navigate('/dashboard');
       } else {
         if (!result.data.session) {
           setError('Account created! Please click the confirmation link in your email before signing in.');
         } else {
-          navigate(dashboardPath);
+          navigate('/dashboard');
         }
         setLoading(false);
       }
