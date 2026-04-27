@@ -166,7 +166,7 @@ const Dashboard = () => {
         {/* Welcome */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 22 }}>
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, color: '#0C1B33', marginBottom: 3 }}>
-            Good morning, Student
+            Good morning, {user?.first_name || 'there'}
           </h1>
           <p style={{ fontSize: 13, color: '#6B7A96' }}>
             Logged in as <strong style={{ color: '#0C1B33' }}>{user?.email}</strong> — keep going, you're doing great.
