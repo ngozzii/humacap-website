@@ -6,7 +6,6 @@ export const COURSES_DATA = [
     category: 'Professional Coaching',
     features: ['50+ Case Scenarios', 'Live 1-on-1 Feedback', 'Standardized Patient Videos'],
     popular: true,
-    stripeUrl: 'https://buy.stripe.com/00w3cv4Kr7G09LW4bl57W00',
   },
   {
     id: 'tech-osce',
@@ -14,7 +13,6 @@ export const COURSES_DATA = [
     price: 950,
     category: 'Professional Coaching',
     features: ['Focused topic review', 'Mock exams', 'Flashcards'],
-    stripeUrl: 'https://buy.stripe.com/eVq3cv90HaScaQ08rB57W01',
   },
   {
     id: 'pharm-math',
@@ -22,7 +20,6 @@ export const COURSES_DATA = [
     price: 299,
     category: 'Professional Coaching',
     features: ['Calculations masterclass', 'Practice problems', 'Formula sheets'],
-    stripeUrl: 'https://buy.stripe.com/test_9B6aEQ9L6eYa0KU6sR9AA00',
   },
   {
     id: 'biz-audit',

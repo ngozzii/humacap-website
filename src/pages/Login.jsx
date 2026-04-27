@@ -4,6 +4,27 @@ import { useAuth } from '../context/AuthContext';
 import { Loader2, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const PASSWORD_RULES = [
+  { key: 'length', label: 'At least 8 characters', test: (value) => value.length >= 8 },
+  { key: 'uppercase', label: 'At least 1 uppercase letter', test: (value) => /[A-Z]/.test(value) },
+  { key: 'lowercase', label: 'At least 1 lowercase letter', test: (value) => /[a-z]/.test(value) },
+  { key: 'number', label: 'At least 1 number', test: (value) => /\d/.test(value) },
+  { key: 'special', label: 'At least 1 special character', test: (value) => /[^A-Za-z0-9]/.test(value) },
+];
+
+const getPasswordValidation = (value) => {
+  const checks = PASSWORD_RULES.map((rule) => ({
+    key: rule.key,
+    label: rule.label,
+    valid: rule.test(value),
+  }));
+
+  return {
+    checks,
+    isValid: checks.every((check) => check.valid),
+  };
+};
+
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [portal, setPortal] = useState(localStorage.getItem('humacap_portal_preference') || 'pharmacy');
@@ -17,16 +38,30 @@ const LoginPage = () => {
 
   const handleAuth = async (e) => {
     e.preventDefault();
+    const passwordValidation = getPasswordValidation(password);
+
+    if (!isLogin && !passwordValidation.isValid) {
+      setError('Please create a stronger password that meets all requirements.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
-    const result = isLogin
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
+    let result;
+    if (isLogin) {
+      result = await supabase.auth.signInWithPassword({ email, password });
+    } else {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = await response.json();
+      result = payload.ok
+        ? { data: { session: null }, error: null }
+        : { data: null, error: { message: payload.error || 'Signup failed.' } };
+    }
 
     const dashboardPath =
       portal === 'instructor'
@@ -63,6 +98,7 @@ const LoginPage = () => {
     setEmail('');
     setPassword('');
   };
+  const passwordValidation = getPasswordValidation(password);
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', fontFamily: "'DM Sans', system-ui, sans-serif", zIndex: 100 }}>
@@ -205,6 +241,23 @@ const LoginPage = () => {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
+                  {!isLogin && (
+                    <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                      <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Password requirements
+                      </p>
+                      <div style={{ display: 'grid', gap: 4 }}>
+                        {passwordValidation.checks.map((check) => (
+                          <div key={check.key} style={{ fontSize: 11.5, color: check.valid ? '#059669' : '#6b7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 14, display: 'inline-flex', justifyContent: 'center', fontWeight: 700 }}>
+                              {check.valid ? '✓' : '•'}
+                            </span>
+                            {check.label}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button type="submit" disabled={loading}
                   style={{ width: '100%', height: 44, background: loading ? '#374151' : '#0C1B33', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+import { loadStripe } from '@stripe/stripe-js';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Navbar from './components/layout/Navbar';
@@ -27,6 +28,7 @@ import InstructorDashboard from './pages/InstructorDashboard';
 import './App.css';
 
 const BARE_ROUTES = ['/login', '/dashboard', '/player', '/profile', '/instructor'];
+let stripePromise;
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -44,7 +46,7 @@ const AppContent = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, supabase } = useAuth();
 
   const hideChromeRoute = BARE_ROUTES.some(r => location.pathname.startsWith(r));
 
@@ -65,13 +67,42 @@ const AppContent = () => {
     navigate(`/${path}`);
   };
 
-  const goToCheckout = (course) => {
-    if (course.stripeUrl) {
-      window.location.href = course.stripeUrl;
-      return;
+  const goToCheckout = async (course) => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ courseId: course.id }),
+      });
+      const payload = await response.json();
+      if (!payload.ok || !payload.sessionId || !payload.publishableKey) {
+        if (response.status === 401) {
+          navigate('/login');
+          return;
+        }
+        throw new Error(payload.error || 'Unable to start checkout.');
+      }
+
+      stripePromise = stripePromise || loadStripe(payload.publishableKey);
+      const stripe = await stripePromise;
+      if (!stripe) throw new Error('Stripe failed to initialize.');
+
+      const { error } = await stripe.redirectToCheckout({ sessionId: payload.sessionId });
+      if (error) throw error;
+    } catch (_err) {
+      setSelectedCourse(course);
+      navigate('/checkout');
     }
-    setSelectedCourse(course);
-    navigate('/checkout');
   };
 
   const viewCourse = (course) => {
