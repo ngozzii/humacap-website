@@ -13,10 +13,9 @@ const enrichUserWithRole = async (authUser) => {
       .select('role')
       .eq('id', authUser.id)
       .maybeSingle();
-    console.log('[AuthContext][Step B] Profiles query result', { userId: authUser.id, data, error });
 
     if (error) {
-      console.warn('Failed to fetch profile role. Falling back to student role.', {
+      console.error('[AuthContext][Role Query Error] Failed to fetch role, falling back to student.', {
         userId: authUser.id,
         reason: error.message || 'profile_query_failed',
       });
@@ -25,16 +24,32 @@ const enrichUserWithRole = async (authUser) => {
       return fallbackUser;
     }
 
-    if (!data || data.role == null) {
-      console.warn('Profile missing or role not set. Falling back to student role.', {
+    if (!data) {
+      console.warn('[AuthContext][Role Missing Profile] No profile row found, falling back to student.', {
         userId: authUser.id,
       });
+      const fallbackUser = { ...authUser, role: 'student' };
+      console.log('[AuthContext][Step C] Final user with fallback role', fallbackUser);
+      return fallbackUser;
+    }
+
+    if (data.role == null) {
+      console.warn('[AuthContext][Role Missing Value] Profile has no role, falling back to student.', {
+        userId: authUser.id,
+      });
+      const fallbackUser = { ...authUser, role: 'student' };
+      console.log('[AuthContext][Step C] Final user with fallback role', fallbackUser);
+      return fallbackUser;
     }
 
     const userWithRole = {
       ...authUser,
-      role: data?.role ?? 'student',
+      role: data.role,
     };
+    console.log('[AuthContext][Role Success] Role fetched successfully', {
+      userId: authUser.id,
+      role: data.role,
+    });
     console.log('[AuthContext][Step C] Final user with role', userWithRole);
     return userWithRole;
   } catch (_err) {
