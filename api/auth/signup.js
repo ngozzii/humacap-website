@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { isRateLimited } from '../_lib/rateLimit';
 import { sanitizeJsonBody, sanitizeStringField, validateEmail } from '../_lib/validation';
-import { getRequestId, logError } from '../_lib/logger';
+import { getRequestId, logError, logInfo } from '../_lib/logger';
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   'mailinator.com',
@@ -130,6 +130,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    logInfo('signup_request_received', {
+      request_id: requestId,
+      endpoint: '/api/auth/signup',
+      has_email: !!email,
+    });
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -152,10 +158,13 @@ export default async function handler(req, res) {
       user: data.user ? { id: data.user.id, email: data.user.email } : null,
       requiresEmailConfirmation: !data.session,
     });
-  } catch (_err) {
+  } catch (error) {
     logError('signup_failed', {
       request_id: requestId,
       endpoint: '/api/auth/signup',
+      error_message: error?.message || 'unknown_error',
+      error_name: error?.name || 'Error',
+      error_stack: error?.stack || null,
     });
     return res.status(500).json({
       ok: false,
