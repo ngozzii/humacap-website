@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { isRateLimited } from '../_lib/rateLimit';
-import { sanitizeJsonBody, sanitizeStringField, validateEmail } from '../_lib/validation';
-import { getRequestId, logError, logInfo } from '../_lib/logger';
+import { isRateLimited } from '../_lib/rateLimit.js';
+import { sanitizeJsonBody, sanitizeStringField, validateEmail } from '../_lib/validation.js';
+import { getRequestId, logError, logInfo } from '../_lib/logger.js';
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   'mailinator.com',

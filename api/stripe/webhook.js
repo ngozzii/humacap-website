@@ -1,7 +1,7 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { sanitizeUuidField } from '../_lib/validation';
-import { getRequestId, logInfo, logError } from '../_lib/logger';
+import { sanitizeUuidField } from '../_lib/validation.js';
+import { getRequestId, logInfo, logError } from '../_lib/logger.js';
 
 const COURSE_PRICING = {
   'pharm-osce': { amount: 119500, currency: 'cad' },

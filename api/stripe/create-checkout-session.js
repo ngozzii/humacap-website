@@ -1,8 +1,8 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { isRateLimited } from '../_lib/rateLimit';
-import { sanitizeJsonBody, sanitizeStringField, sanitizeUuidField } from '../_lib/validation';
-import { getRequestId, logInfo, logError } from '../_lib/logger';
+import { isRateLimited } from '../_lib/rateLimit.js';
+import { sanitizeJsonBody, sanitizeStringField, sanitizeUuidField } from '../_lib/validation.js';
+import { getRequestId, logInfo, logError } from '../_lib/logger.js';
 
 const COURSE_PRICING = {
   'pharm-osce': {
