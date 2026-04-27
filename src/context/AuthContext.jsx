@@ -95,13 +95,21 @@ export const AuthProvider = ({ children }) => {
 
     try {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        console.log('[AuthContext][AuthStateChange] Event received', { event: _event, session });
-        if (!session?.user) {
+        try {
+          console.log('[AuthContext][AuthStateChange] Event received', { event: _event, session });
+          if (!session?.user) {
+            setUser(null);
+            return;
+          }
+          const userWithRole = await enrichUserWithRole(session.user);
+          setUser(userWithRole);
+        } catch (err) {
+          console.error('[AuthContext][Error] onAuthStateChange handler failed', err);
           setUser(null);
-          return;
+        } finally {
+          // Safety net: never leave the app in a loading state.
+          setLoading(false);
         }
-        const userWithRole = await enrichUserWithRole(session.user);
-        setUser(userWithRole);
       });
       subscription = sub;
     } catch (err) {
