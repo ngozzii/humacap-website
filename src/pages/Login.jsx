@@ -57,7 +57,15 @@ const LoginPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const payload = await response.json();
+      let payload;
+      try {
+        payload = await response.json();
+      } catch (_e) {
+        throw new Error('Invalid server response');
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Signup failed');
+      }
       result = payload.ok
         ? { data: { session: null }, error: null }
         : { data: null, error: { message: payload.error || 'Signup failed.' } };

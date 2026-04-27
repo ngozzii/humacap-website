@@ -73,13 +73,14 @@ const hasCaptchaToken = (req, body) => {
 
 export default async function handler(req, res) {
   const requestId = getRequestId(req);
+  console.log('SIGNUP START');
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   if (!isJsonRequest(req)) {
-    return res.status(400).json({ ok: false, error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   if (await isRateLimited(req, { prefix: 'rl:signup', maxRequests: 8, windowSeconds: 60 })) {
@@ -87,46 +88,40 @@ export default async function handler(req, res) {
       request_id: requestId,
       endpoint: '/api/auth/signup',
     });
-    return res.status(429).json({ ok: false, error: 'Too many requests. Please try again shortly.' });
+    return res.status(429).json({ error: 'Too many requests. Please try again shortly.' });
   }
 
   const body = parseJsonBody(req);
   const sanitizedBody = sanitizeJsonBody(body);
   if (!sanitizedBody) {
-    return res.status(400).json({ ok: false, error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   const emailField = sanitizeStringField(sanitizedBody.email, { fieldName: 'Email', maxLength: 254 });
   const passwordField = sanitizeStringField(sanitizedBody.password, { fieldName: 'Password', maxLength: 128 });
   if (!emailField.ok || !passwordField.ok) {
-    return res.status(400).json({ ok: false, error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   const email = emailField.value.toLowerCase();
   const password = passwordField.value;
   if (!isEmailStrictlyValid(email) || isDisposableDomain(email)) {
-    return res.status(400).json({ ok: false, error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   if (isCaptchaRequired() && !hasCaptchaToken(req, sanitizedBody)) {
-    return res.status(400).json({ ok: false, error: 'Invalid request' });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   const passwordValidation = validatePassword(password);
   if (!passwordValidation.valid) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Invalid request',
-    });
+    return res.status(400).json({ error: 'Invalid request' });
   }
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
-    return res.status(500).json({
-      ok: false,
-      error: 'Invalid request',
-    });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 
   try {
@@ -135,6 +130,7 @@ export default async function handler(req, res) {
       endpoint: '/api/auth/signup',
       has_email: !!email,
     });
+    console.log('SIGNUP VALIDATION PASSED');
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data, error } = await supabase.auth.signUp({
@@ -144,21 +140,15 @@ export default async function handler(req, res) {
         emailRedirectTo: req.headers.origin || undefined,
       },
     });
+    console.log('SUPABASE RESPONSE', { success: !!data, error });
 
     if (error) {
-      return res.status(400).json({
-        ok: false,
-        error: 'Invalid request',
-      });
+      return res.status(400).json({ error: 'Invalid request' });
     }
 
-    return res.status(200).json({
-      ok: true,
-      message: 'Signup successful.',
-      user: data.user ? { id: data.user.id, email: data.user.email } : null,
-      requiresEmailConfirmation: !data.session,
-    });
+    return res.status(200).json({ ok: true });
   } catch (error) {
+    console.error('SIGNUP ERROR', error);
     logError('signup_failed', {
       request_id: requestId,
       endpoint: '/api/auth/signup',
@@ -166,9 +156,6 @@ export default async function handler(req, res) {
       error_name: error?.name || 'Error',
       error_stack: error?.stack || null,
     });
-    return res.status(500).json({
-      ok: false,
-      error: 'Invalid request',
-    });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
