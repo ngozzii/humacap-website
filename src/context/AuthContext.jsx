@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext({});
@@ -78,10 +78,11 @@ const enrichUserWithRole = async (authUser) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isFetchingProfileRef = useRef(false);
 
   useEffect(() => {
     let isActive = true;
-    let authChangeRequestId = 0;
+    let authEventId = 0;
     let subscription;
     const loadingSafetyTimeout = setTimeout(() => {
       if (isActive) {
@@ -90,62 +91,47 @@ export const AuthProvider = ({ children }) => {
       }
     }, 10000);
 
-    const bootstrap = async () => {
-      try {
-        console.log('[AuthContext][Bootstrap] Session load started');
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!isActive) return;
-        console.log('[AuthContext][Bootstrap] getSession returned', { session });
-        if (!session?.user) {
-          setUser(null);
-        } else {
-          const userWithRole = await enrichUserWithRole(session.user);
-          if (!isActive) return;
-          setUser(userWithRole);
-        }
-      } catch (err) {
-        if (!isActive) return;
-        // If Supabase env vars aren't set (or network fails), keep the UI usable.
-        console.warn('Supabase getSession failed:', err);
-        console.error('[AuthContext][Error] bootstrap failed', err);
-        setUser(null);
-      } finally {
-        if (isActive) setLoading(false);
-      }
-    };
-
-    bootstrap();
-
     try {
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        const requestId = ++authChangeRequestId;
+        const eventId = ++authEventId;
         try {
           console.log('[AuthContext][AuthStateChange] Event received', { event: _event, session });
           if (_event === 'SIGNED_OUT') {
             console.log('[AuthContext] SIGNED_OUT handled');
-            if (!isActive || requestId !== authChangeRequestId) return;
+            if (!isActive || eventId !== authEventId) return;
             setUser(null);
+            isFetchingProfileRef.current = false;
             setLoading(false);
             return;
           }
 
           if (!session?.user?.id) {
             console.log('[AuthContext] Skipping profile fetch due to missing session');
-            if (!isActive || requestId !== authChangeRequestId) return;
+            if (!isActive || eventId !== authEventId) return;
             setUser(null);
+            isFetchingProfileRef.current = false;
             return;
           }
 
+          if (isFetchingProfileRef.current) {
+            console.log('[AuthContext] Skipping duplicate profile fetch');
+            return;
+          }
+
+          isFetchingProfileRef.current = true;
+          console.log('[AuthContext] Profile fetch started', { userId: session.user.id, event: _event });
           const userWithRole = await enrichUserWithRole(session.user);
-          if (!isActive || requestId !== authChangeRequestId) return;
+          if (!isActive || eventId !== authEventId) return;
           setUser(userWithRole);
+          console.log('[AuthContext] Profile fetch completed', { userId: session.user.id, event: _event });
         } catch (err) {
-          if (!isActive || requestId !== authChangeRequestId) return;
+          if (!isActive || eventId !== authEventId) return;
           console.error('[AuthContext][Error] onAuthStateChange handler failed', err);
           setUser(null);
         } finally {
+          isFetchingProfileRef.current = false;
           // Safety net: never leave the app in a loading state.
-          if (isActive && requestId === authChangeRequestId) setLoading(false);
+          if (isActive && eventId === authEventId) setLoading(false);
         }
       });
       subscription = sub;
@@ -156,6 +142,7 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       isActive = false;
+      isFetchingProfileRef.current = false;
       clearTimeout(loadingSafetyTimeout);
       subscription?.unsubscribe?.();
     };
