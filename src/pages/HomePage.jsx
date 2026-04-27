@@ -8,7 +8,12 @@ const HomePage = ({ navigate }) => (
     <section className="corporate-hero section">
       <div className="container text-center">
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
-          <span className="pill-badge">Humacap Training Solutions</span>
+          <div className="hero-badge" role="note" aria-label="Humacap Training Solutions">
+            <span className="hero-badge-icon">
+              <BookOpen size={14} />
+            </span>
+            <span>Humacap Training Solutions</span>
+          </div>
           <h1 className="corporate-title">
             Expert Training for{' '}
             <span className="text-teal">Pharmacy Professionals</span> &amp; Growing Businesses
