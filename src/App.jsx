@@ -30,7 +30,7 @@ import './App.css';
 const BARE_ROUTES = ['/login', '/dashboard', '/player', '/profile', '/instructor'];
 let stripePromise;
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -39,6 +39,9 @@ const ProtectedRoute = ({ children }) => {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
+  if (Array.isArray(allowedRoles) && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 };
 
@@ -56,11 +59,11 @@ const AppContent = () => {
       return;
     }
     if (path === 'dashboard') {
-      const portal = localStorage.getItem('humacap_portal_preference');
-      if (portal === 'instructor') {
+      if (user?.role === 'instructor') {
         navigate('/instructor');
         return;
       }
+      const portal = localStorage.getItem('humacap_portal_preference');
       navigate(portal === 'business' ? '/dashboard-business' : '/dashboard');
       return;
     }
@@ -137,7 +140,7 @@ const AppContent = () => {
             <Route path="/dashboard-business/course/:courseId" element={<ProtectedRoute><BusinessCoursePlaceholder /></ProtectedRoute>} />
             <Route path="/player/:courseId" element={<ProtectedRoute><CoursePlayer /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-            <Route path="/instructor" element={<ProtectedRoute><InstructorDashboard /></ProtectedRoute>} />
+            <Route path="/instructor" element={<ProtectedRoute allowedRoles={['instructor']}><InstructorDashboard /></ProtectedRoute>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -360,6 +360,31 @@ export default async function handler(req, res) {
           throw insertErr;
         }
       }
+
+      const { error: entitlementError } = await supabase
+        .from('user_course_access')
+        .upsert(
+          {
+            user_id: metadataUserId,
+            course_id: metadataCourseId,
+            granted_by: 'purchase',
+          },
+          {
+            onConflict: 'user_id,course_id',
+            ignoreDuplicates: true,
+          }
+        );
+
+      if (entitlementError) {
+        throw entitlementError;
+      }
+
+      logInfo('course_access_granted', {
+        request_id: metadataRequestId,
+        user_id: metadataUserId,
+        course_id: metadataCourseId,
+        stripe_session_id: session.id,
+      });
     } catch (_err) {
       logError('webhook_database_error', {
         request_id: metadataRequestId,

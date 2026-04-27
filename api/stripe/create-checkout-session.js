@@ -4,39 +4,6 @@ import { isRateLimited } from '../_lib/rateLimit.js';
 import { sanitizeJsonBody, sanitizeStringField, sanitizeUuidField } from '../_lib/validation.js';
 import { getRequestId, logInfo, logError } from '../_lib/logger.js';
 
-const COURSE_PRICING = {
-  'pharm-osce': {
-    name: 'Pharmacist Qualifying Exam Part II (OSCE)',
-    amountInCents: 119500,
-    currency: 'cad',
-  },
-  'tech-osce': {
-    name: 'Pharmacy Technician Qualifying Exam',
-    amountInCents: 95000,
-    currency: 'cad',
-  },
-  'pharm-math': {
-    name: 'Pharmacy Math Course',
-    amountInCents: 29900,
-    currency: 'cad',
-  },
-  'biz-audit': {
-    name: 'The Growth Trap Audit',
-    amountInCents: 149500,
-    currency: 'cad',
-  },
-  'biz-roadmap': {
-    name: 'Strategic Alignment Roadmap',
-    amountInCents: 495000,
-    currency: 'cad',
-  },
-  'biz-partnership': {
-    name: 'Fractional Executive Partnership',
-    amountInCents: 250000,
-    currency: 'cad',
-  },
-};
-
 const parseJsonBody = (req) => {
   if (typeof req.body === 'object' && req.body !== null) return req.body;
   if (typeof req.body === 'string') {
@@ -57,6 +24,29 @@ const getBearerToken = (req) => {
   const token = authHeader.slice('Bearer '.length).trim();
   if (!token || token.length > 4096) return null;
   return token;
+};
+
+const resolveCourseFromDb = (courseRow) => {
+  const title = typeof courseRow?.title === 'string' && courseRow.title.trim().length > 0
+    ? courseRow.title.trim()
+    : (typeof courseRow?.name === 'string' && courseRow.name.trim().length > 0 ? courseRow.name.trim() : null);
+
+  const rawAmount =
+    courseRow?.price_in_cents ??
+    courseRow?.price_cents ??
+    courseRow?.amount_in_cents ??
+    (typeof courseRow?.price === 'number' ? Math.round(courseRow.price * 100) : null);
+
+  const amountInCents = Number.isInteger(rawAmount) ? rawAmount : null;
+  const currency = typeof courseRow?.currency === 'string' && courseRow.currency.trim().length > 0
+    ? courseRow.currency.trim().toLowerCase()
+    : 'cad';
+
+  if (!title || !amountInCents || amountInCents <= 0) {
+    return null;
+  }
+
+  return { title, amountInCents, currency };
 };
 
 export default async function handler(req, res) {
@@ -111,9 +101,7 @@ export default async function handler(req, res) {
 
   const courseId = courseIdField.value;
   const userId = userIdField.value;
-  const courseConfig = COURSE_PRICING[courseId];
-
-  if (!courseId || !courseConfig) {
+  if (!courseId) {
     return res.status(400).json({ ok: false, error: 'Invalid courseId. Please select a valid course.' });
   }
 
@@ -127,6 +115,21 @@ export default async function handler(req, res) {
   const stripe = new Stripe(stripeKey, { apiVersion: '2024-06-20' });
 
   try {
+    const { data: courseRow, error: courseLookupError } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('id', courseId)
+      .maybeSingle();
+
+    if (courseLookupError || !courseRow) {
+      return res.status(400).json({ ok: false, error: 'Invalid courseId. Please select a valid course.' });
+    }
+
+    const courseConfig = resolveCourseFromDb(courseRow);
+    if (!courseConfig) {
+      return res.status(400).json({ ok: false, error: 'Invalid course configuration.' });
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{
@@ -135,7 +138,7 @@ export default async function handler(req, res) {
           currency: courseConfig.currency,
           unit_amount: courseConfig.amountInCents,
           product_data: {
-            name: courseConfig.name,
+            name: courseConfig.title,
             metadata: { course_id: courseId },
           },
         },

@@ -81,7 +81,7 @@ const Navbar = ({ navigate, currentPage }) => {
               <button onClick={() => handleNav('dashboard')} className="btn btn-primary flex items-center gap-2">
                 <User size={16} /> Dashboard
               </button>
-              {(user?.email === 'info@humacap.ca' || localStorage.getItem('humacap_portal_preference') === 'instructor') && (
+              {user?.role === 'instructor' && (
                 <button onClick={() => handleNav('instructor')} className="btn btn-primary flex items-center gap-2">
                   Instructor Portal
                 </button>

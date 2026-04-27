@@ -30,6 +30,9 @@ export default function CoursePlayer() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const { user, supabase } = useAuth();
+  const [accessLoading, setAccessLoading] = useState(true);
+  const [hasCourseAccess, setHasCourseAccess] = useState(false);
+  const [shouldRedirectUnauthorized, setShouldRedirectUnauthorized] = useState(false);
   const [activeLesson, setActiveLesson] = useState(0);
   const [completedLessons, setCompletedLessons] = useState(new Set());
   const [showLockWarning, setShowLockWarning] = useState(false);
@@ -47,6 +50,68 @@ export default function CoursePlayer() {
       Course not found. <button onClick={() => navigate('/dashboard')}>Back to dashboard</button>
     </div>
   );
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadAccess = async () => {
+      if (!user?.id || !courseId) {
+        if (mounted) {
+          setHasCourseAccess(false);
+          setShouldRedirectUnauthorized(true);
+          setAccessLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('user_course_access')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('course_id', courseId)
+          .maybeSingle();
+
+        if (mounted) {
+          const entitled = !error && !!data;
+          setHasCourseAccess(entitled);
+          setShouldRedirectUnauthorized(!entitled);
+          setAccessLoading(false);
+        }
+      } catch (_err) {
+        if (mounted) {
+          setHasCourseAccess(false);
+          setShouldRedirectUnauthorized(true);
+          setAccessLoading(false);
+        }
+      }
+    };
+
+    loadAccess();
+    return () => { mounted = false; };
+  }, [courseId, supabase, user?.id]);
+
+  useEffect(() => {
+    if (!accessLoading && shouldRedirectUnauthorized) {
+      navigate('/dashboard?error=unauthorized', { replace: true });
+    }
+  }, [accessLoading, shouldRedirectUnauthorized, navigate]);
+
+  if (accessLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F4F6F9', fontFamily: "'DM Sans', sans-serif", color: '#6B7A96' }}>
+        Checking course access...
+      </div>
+    );
+  }
+
+  if (!hasCourseAccess) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F4F6F9', fontFamily: "'DM Sans', sans-serif", color: '#6B7A96' }}>
+        Redirecting...
+      </div>
+    );
+  }
 
   const currentLesson = allLessons[activeLesson];
   const progress = Math.round((completedLessons.size / allLessons.length) * 100);

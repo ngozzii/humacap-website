@@ -36,6 +36,21 @@ const LoginPage = () => {
   const { supabase } = useAuth();
   const navigate = useNavigate();
 
+  const fetchUserRole = async (userId) => {
+    if (!userId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) return null;
+      return data?.role || null;
+    } catch (_err) {
+      return null;
+    }
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     const passwordValidation = getPasswordValidation(password);
@@ -71,10 +86,11 @@ const LoginPage = () => {
         : { data: null, error: { message: payload.error || 'Signup failed.' } };
     }
 
-    const dashboardPath =
-      portal === 'instructor'
-        ? '/instructor'
-        : (portal === 'business' ? '/dashboard-business' : '/dashboard');
+    const loggedInUserId = result?.data?.user?.id || null;
+    const role = isLogin ? await fetchUserRole(loggedInUserId) : null;
+    const dashboardPath = role === 'instructor'
+      ? '/instructor'
+      : (portal === 'business' ? '/dashboard-business' : '/dashboard');
     localStorage.setItem('humacap_portal_preference', portal);
 
     if (result.error) {
@@ -200,13 +216,6 @@ const LoginPage = () => {
                   style={{ flex: 1, height: 34, border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: portal === 'business' ? '#ffffff' : 'transparent', color: portal === 'business' ? '#0C1B33' : '#7B879B' }}
                 >
                   Business Path
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPortal('instructor'); localStorage.setItem('humacap_portal_preference', 'instructor'); }}
-                  style={{ flex: 1, height: 34, border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: portal === 'instructor' ? '#ffffff' : 'transparent', color: portal === 'instructor' ? '#0C1B33' : '#7B879B' }}
-                >
-                  Instructor
                 </button>
               </div>
             </div>

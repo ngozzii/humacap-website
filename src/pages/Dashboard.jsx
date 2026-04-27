@@ -3,25 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { BookOpen, Play, Clock, Award, Calendar, ArrowRight, TrendingUp, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { COURSES_DATA } from '../data/courses';
-
-const COURSE_ACCESS_CODES = {
-  'pharm-osce': 'PHARM2026',
-  'tech-osce': 'TECH2026',
-  'pharm-math': 'MATH2026',
-};
 
 const Dashboard = () => {
   const { user, supabase } = useAuth();
   const navigate = useNavigate();
-  const enrolledCourses = COURSES_DATA.filter(c => c.price > 0 && !c.category?.includes('Consulting'));
-  const freeCourses = COURSES_DATA.filter(c => c.isFree || c.price === 0);
-  const learningCards = [...enrolledCourses, ...freeCourses];
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
   const [liveSessions, setLiveSessions] = useState([]);
-  const [unlockedCourseIds, setUnlockedCourseIds] = useState(new Set());
-  const [accessModalCourse, setAccessModalCourse] = useState(null);
-  const [accessCodeInput, setAccessCodeInput] = useState('');
-  const [accessCodeError, setAccessCodeError] = useState('');
+  const [accessError, setAccessError] = useState('');
 
   useEffect(() => {
     const portal = localStorage.getItem('humacap_portal_preference');
@@ -82,53 +71,65 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    const key = `humacap_unlocked_${user?.id || 'anon'}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setUnlockedCourseIds(new Set(parsed));
-    } catch (_err) {
-      // Ignore bad local storage payloads.
-    }
-  }, [user?.id]);
+    let mounted = true;
 
-  const persistUnlocked = (nextSet) => {
-    const key = `humacap_unlocked_${user?.id || 'anon'}`;
-    localStorage.setItem(key, JSON.stringify(Array.from(nextSet)));
-  };
+    const loadEnrolledCourses = async () => {
+      if (!user?.id) {
+        if (mounted) {
+          setEnrolledCourses([]);
+          setCoursesLoading(false);
+        }
+        return;
+      }
 
-  const openCourse = (course, isFree) => {
-    if (isFree) {
-      navigate(`/player/${course.id}`);
+      try {
+        const { data, error } = await supabase
+          .from('user_course_access')
+          .select(`
+            course_id,
+            courses (*)
+          `)
+          .eq('user_id', user.id);
+
+        if (error) {
+          if (mounted) {
+            setEnrolledCourses([]);
+            setCoursesLoading(false);
+          }
+          return;
+        }
+
+        const normalizedCourses = (data || [])
+          .filter((row) => !!row?.course_id && !!row?.courses)
+          .map((row) => ({
+            course_id: row.course_id,
+            ...row.courses,
+          }));
+
+        if (mounted) {
+          setEnrolledCourses(normalizedCourses);
+          setCoursesLoading(false);
+        }
+      } catch (_err) {
+        if (mounted) {
+          setEnrolledCourses([]);
+          setCoursesLoading(false);
+        }
+      }
+    };
+
+    loadEnrolledCourses();
+    return () => { mounted = false; };
+  }, [supabase, user?.id]);
+
+  const openCourse = (course) => {
+    if (course?.course_id) {
+      setAccessError('');
+      navigate(`/player/${course.course_id}`);
       return;
     }
 
-    if (unlockedCourseIds.has(course.id)) {
-      navigate(`/player/${course.id}`);
-      return;
-    }
-
-    setAccessModalCourse(course);
-    setAccessCodeInput('');
-    setAccessCodeError('');
-  };
-
-  const submitAccessCode = () => {
-    if (!accessModalCourse) return;
-    const expected = COURSE_ACCESS_CODES[accessModalCourse.id];
-    const entered = accessCodeInput.trim().toUpperCase();
-    if (!expected || entered !== expected) {
-      setAccessCodeError('Incorrect access code. Please check and try again.');
-      return;
-    }
-
-    const nextSet = new Set(unlockedCourseIds);
-    nextSet.add(accessModalCourse.id);
-    setUnlockedCourseIds(nextSet);
-    persistUnlocked(nextSet);
-    navigate(`/player/${accessModalCourse.id}`);
-    setAccessModalCourse(null);
+    setAccessError('Course access record is invalid. Please contact support.');
   };
 
   return (
@@ -171,6 +172,11 @@ const Dashboard = () => {
             Logged in as <strong style={{ color: '#0C1B33' }}>{user?.email}</strong> — keep going, you're doing great.
           </p>
         </motion.div>
+        {accessError && (
+          <div style={{ marginBottom: 12, background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, fontWeight: 500 }}>
+            {accessError}
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 270px', gap: 20 }}>
 
@@ -181,29 +187,39 @@ const Dashboard = () => {
               My Learning
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {learningCards.map((course, i) => {
-                const isFree = !!(course.isFree || course.price === 0);
-                const isUnlocked = isFree || unlockedCourseIds.has(course.id);
-                const progress = !isFree && i === 0 && isUnlocked ? 33 : 0;
+            {coursesLoading ? (
+              <div style={{ background: 'white', border: '1px solid rgba(12,27,51,0.08)', borderRadius: 12, padding: 16, fontSize: 13, color: '#6B7A96' }}>
+                Loading your courses...
+              </div>
+            ) : enrolledCourses.length === 0 ? (
+              <div style={{ background: 'white', border: '1px solid rgba(12,27,51,0.08)', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0C1B33', marginBottom: 6 }}>No enrolled courses yet</div>
+                <div style={{ fontSize: 12.5, color: '#6B7A96', lineHeight: 1.6, marginBottom: 10 }}>
+                  Your dashboard will show courses here once access has been granted.
+                </div>
+                <button
+                  onClick={() => navigate('/pharmacy')}
+                  style={{ background: '#0C1B33', color: 'white', border: 'none', borderRadius: 7, padding: '8px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Browse Courses
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {enrolledCourses.map((course, i) => {
+                const progress = i === 0 ? 33 : 0;
                 const C = 24, R = 2 * Math.PI * C;
                 const offset = R - (progress / 100) * R;
                 return (
                   <motion.div
-                    key={course.id}
+                    key={course.course_id}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07 }}
                     style={{ background: 'white', borderRadius: 12, border: '1px solid rgba(12,27,51,0.08)', overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s, transform 0.15s', position: 'relative' }}
                     whileHover={{ boxShadow: '0 4px 20px rgba(12,27,51,0.10)', y: -2 }}
-                    onClick={() => openCourse(course, isFree)}
+                    onClick={() => openCourse(course)}
                   >
-                    {!isUnlocked && (
-                      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 2, background: 'rgba(12,27,51,0.88)', color: 'white', borderRadius: 99, padding: '4px 8px', fontSize: 10.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Lock size={10} />
-                        Locked
-                      </div>
-                    )}
                     {/* Thumbnail */}
                     <div style={{ height: 110, background: '#0C1B33', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', fontFamily: "'DM Serif Display', serif", fontSize: 28, color: 'rgba(23,195,178,0.07)', letterSpacing: 4, textTransform: 'uppercase', userSelect: 'none' }}>HUMACAP</div>
@@ -215,11 +231,16 @@ const Dashboard = () => {
                     {/* Body */}
                     <div style={{ padding: 14 }}>
                       <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.6px', color: '#17C3B2', marginBottom: 5 }}>
-                        {isFree ? 'Free Courses' : 'PEBC® Coaching'}
+                        {course.category || 'Course'}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#0C1B33', marginBottom: 8, lineHeight: 1.35 }}>
                         {course.title}
                       </div>
+                      {course.description && (
+                        <div style={{ fontSize: 11, color: '#6B7A96', marginBottom: 8, lineHeight: 1.45 }}>
+                          {course.description}
+                        </div>
+                      )}
                       <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#6B7A96', marginBottom: 10 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Clock size={11} color="#17C3B2" /> 6 modules
@@ -237,12 +258,12 @@ const Dashboard = () => {
                             <circle cx="30" cy="30" r={C} fill="none" stroke="#17C3B2" strokeWidth="4" strokeLinecap="round" strokeDasharray={R} strokeDashoffset={offset} />
                           </svg>
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#0C1B33' }}>
-                            {!isUnlocked ? '🔒' : `${progress}%`}
+                            {`${progress}%`}
                           </div>
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 10.5, color: '#6B7A96', fontWeight: 500, marginBottom: 3 }}>
-                            {isFree ? 'Free access' : !isUnlocked ? 'Enter access code to unlock' : i === 0 ? '2 of 6 modules done' : 'Not started'}
+                            {i === 0 ? '2 of 6 modules done' : 'Not started'}
                           </div>
                           <div style={{ height: 4, background: '#E9ECF0', borderRadius: 2, overflow: 'hidden' }}>
                             <motion.div
@@ -256,17 +277,18 @@ const Dashboard = () => {
                       </div>
 
                       <button
-                        onClick={e => { e.stopPropagation(); openCourse(course, isFree); }}
+                        onClick={e => { e.stopPropagation(); openCourse(course); }}
                         style={{ width: '100%', background: '#0C1B33', color: 'white', border: 'none', fontFamily: "'DM Sans', sans-serif", fontSize: 12, fontWeight: 600, padding: '9px', borderRadius: 7, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                       >
                         <Play size={12} fill="white" color="white" />
-                        {isFree ? 'Start free' : !isUnlocked ? 'Enter access code' : i === 0 ? 'Continue learning' : 'Start course'}
+                        {i === 0 ? 'Continue learning' : 'Start course'}
                       </button>
                     </div>
                   </motion.div>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
 
           {/* SIDEBAR */}
@@ -342,7 +364,7 @@ const Dashboard = () => {
               </div>
               <div style={{ padding: '12px 14px' }}>
                 {enrolledCourses.map((c, i) => (
-                  <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: i < enrolledCourses.length - 1 ? '1px dashed rgba(12,27,51,0.08)' : 'none' }}>
+                  <div key={c.course_id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: i < enrolledCourses.length - 1 ? '1px dashed rgba(12,27,51,0.08)' : 'none' }}>
                     <div style={{ width: 32, height: 32, borderRadius: 7, background: 'rgba(23,195,178,0.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <BookOpen size={15} color="#17C3B2" strokeWidth={1.5} />
                     </div>
@@ -370,40 +392,6 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-
-      {accessModalCourse && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(3,10,22,0.58)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 460, background: 'white', borderRadius: 12, border: '1px solid rgba(12,27,51,0.1)', padding: 18 }}>
-            <h3 style={{ marginTop: 0, marginBottom: 6, color: '#0C1B33', fontFamily: "'DM Serif Display', serif", fontSize: 22 }}>Enter Course Access Code</h3>
-            <p style={{ marginTop: 0, color: '#6B7A96', fontSize: 12.5, lineHeight: 1.6 }}>
-              <strong style={{ color: '#0C1B33' }}>{accessModalCourse.title}</strong> is locked. Enter your code to unlock this course.
-            </p>
-            <input
-              autoFocus
-              value={accessCodeInput}
-              onChange={(e) => setAccessCodeInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') submitAccessCode(); }}
-              placeholder="e.g. PHARM2026"
-              style={{ width: '100%', marginTop: 4, border: '1px solid rgba(12,27,51,0.15)', borderRadius: 8, padding: '10px 12px', fontSize: 13 }}
-            />
-            {accessCodeError && <div style={{ color: '#B91C1C', fontSize: 11.5, marginTop: 8 }}>{accessCodeError}</div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-              <button
-                onClick={() => setAccessModalCourse(null)}
-                style={{ background: 'white', border: '1px solid rgba(12,27,51,0.16)', color: '#0C1B33', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitAccessCode}
-                style={{ background: '#0C1B33', border: 'none', color: 'white', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-              >
-                Unlock course
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
