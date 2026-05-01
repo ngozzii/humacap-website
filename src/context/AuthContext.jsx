@@ -79,6 +79,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const isFetchingProfileRef = useRef(false);
+  const lastUserIdRef = useRef(null);
 
   useEffect(() => {
     let isActive = true;
@@ -99,6 +100,7 @@ export const AuthProvider = ({ children }) => {
           if (_event === 'SIGNED_OUT') {
             console.log('[AuthContext] SIGNED_OUT handled');
             if (!isActive || eventId !== authEventId) return;
+            lastUserIdRef.current = null;
             setUser(null);
             isFetchingProfileRef.current = false;
             setLoading(false);
@@ -108,13 +110,21 @@ export const AuthProvider = ({ children }) => {
           if (!session?.user?.id) {
             console.log('[AuthContext] Skipping profile fetch due to missing session');
             if (!isActive || eventId !== authEventId) return;
+            lastUserIdRef.current = null;
             setUser(null);
             isFetchingProfileRef.current = false;
             return;
           }
 
+          if (lastUserIdRef.current === session.user.id) {
+            console.log('[AuthContext] Skipping duplicate SIGNED_IN event');
+            if (isActive && eventId === authEventId) setLoading(false);
+            return;
+          }
+
           if (isFetchingProfileRef.current) {
-            console.log('[AuthContext] Skipping duplicate profile fetch');
+            console.log('[AuthContext] Profile fetch already in progress');
+            if (isActive && eventId === authEventId) setLoading(false);
             return;
           }
 
@@ -123,10 +133,12 @@ export const AuthProvider = ({ children }) => {
           const userWithRole = await enrichUserWithRole(session.user);
           if (!isActive || eventId !== authEventId) return;
           setUser(userWithRole);
+          lastUserIdRef.current = session.user.id;
           console.log('[AuthContext] Profile fetch completed', { userId: session.user.id, event: _event });
         } catch (err) {
           if (!isActive || eventId !== authEventId) return;
           console.error('[AuthContext][Error] onAuthStateChange handler failed', err);
+          lastUserIdRef.current = null;
           setUser(null);
         } finally {
           isFetchingProfileRef.current = false;
@@ -143,6 +155,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       isActive = false;
       isFetchingProfileRef.current = false;
+      lastUserIdRef.current = null;
       clearTimeout(loadingSafetyTimeout);
       subscription?.unsubscribe?.();
     };
